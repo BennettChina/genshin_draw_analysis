@@ -37,7 +37,8 @@ export async function main(
 	if ( !url || url.indexOf( "http" ) <= -1 ) {
 		let info: Private | string | undefined;
 		// 优先从抽卡分析的key中获取Cookie等信息
-		let { cookie, uid: game_uid, server, mysID } = await redis.getHash( `genshin_gacha.cookie.${ userID }` );
+		const key = `genshin_gacha.cookie.${ userID }${ sn ? "." + sn : "" }`;
+		let { cookie, uid: game_uid, server, mysID } = await redis.getHash( key );
 		if ( !cookie ) {
 			// 再从私人服务获取Cookie
 			info = await getPrivateAccount( userID, sn, auth );
@@ -66,7 +67,7 @@ export async function main(
 				if ( info && info instanceof Private ) {
 					await info.replaceCookie( new_cookie );
 				} else {
-					await redis.setHashField( `genshin_gacha.cookie.${ userID }`, "cookie", new_cookie );
+					await redis.setHashField( key, "cookie", new_cookie );
 				}
 			}
 			// 校验成功放入缓存，不需要频繁生成URL
