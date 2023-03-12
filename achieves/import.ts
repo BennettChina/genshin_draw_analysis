@@ -1,6 +1,6 @@
 import { InputParameter } from "@modules/command";
 import fetch from "node-fetch";
-import { FileElem, GroupMessageEventData, PrivateMessageEventData, ReplyElem, Ret, TextElem } from "oicq";
+import { FileElem, GroupMessageEventData, PrivateMessageEventData, ReplyElem, Ret } from "oicq";
 import { Gacha_Info, Standard_Gacha } from "#genshin_draw_analysis/util/types";
 import { fakeIdFn } from "#genshin_draw_analysis/util/util";
 
@@ -60,11 +60,8 @@ async function import_from_excel( file_url: string, { redis, sendMessage }: Inpu
 export async function main( bot: InputParameter ): Promise<void> {
 	const { sendMessage, messageData, client, logger } = bot;
 	const { message, raw_message } = messageData;
-	// 从原始信息中获取值，raw_message 已被修改为纯小写，匹配到的链接可能会404
-	const textElem: TextElem = <TextElem>message.filter( msg => msg.type === 'text' )[0];
-	const origin_message: string = textElem.data.text;
 	const reg = new RegExp( /(?<import_type>json|excel)\s*(?<url>https?:\/\/(?:www\.)?[-a-zA-Z\d@:%._+~#=]{1,256}\.[a-zA-Z\d()]{1,6}\b[-a-zA-Z\d()!@:%_+.~#?&/=]*)?/ );
-	const exec: RegExpExecArray | null = reg.exec( origin_message );
+	const exec: RegExpExecArray | null = reg.exec( raw_message );
 	const download_url: string = ( exec?.groups?.url || "" ).trim();
 	const import_type: string | undefined = exec?.groups?.import_type;
 	if ( download_url ) {

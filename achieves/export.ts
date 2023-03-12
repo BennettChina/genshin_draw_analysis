@@ -347,43 +347,30 @@ async function export_gacha_url( user_id: number, sn: string, { redis, sendMessa
 	}
 	
 	let info: Private | string | undefined;
-	// 优先从抽卡分析的key中获取Cookie等信息
-	let { cookie, uid: game_uid, server, mysID } = await redis.getHash( `genshin_gacha.cookie.${ user_id }` );
-	if ( !cookie ) {
-		// 再从私人服务获取Cookie
-		info = await getPrivateAccount( user_id, sn, auth );
-		if ( typeof info === "string" ) {
-			await sendMessage( info );
-			return;
-		}
-		cookie = info.setting.stoken;
-		game_uid = info.setting.uid;
-		server = info.setting.server;
-		mysID = info.setting.mysID;
+	// 从私人服务获取Cookie
+	info = await getPrivateAccount( user_id, sn, auth );
+	if ( typeof info === "string" ) {
+		await sendMessage( info );
+		return;
 	}
 	let gen_res: GachaUrl | undefined
 	try {
-		gen_res = await generatorUrl( cookie, game_uid, mysID, server );
+		gen_res = await generatorUrl( info.setting.stoken, info.setting.uid, info.setting.mysID, info.setting.server );
 	} catch ( e ) {
 		logger.error( <string>e );
 		await sendMessage( <string>e );
 		return;
 	}
 	if ( gen_res ) {
-		const { api_log_url, log_html_url, cookie: new_cookie } = gen_res;
+		const { api_log_url, log_html_url, cookie } = gen_res;
 		url = api_log_url;
 		// 更新ck
-		if ( new_cookie ) {
-			if ( info && info instanceof Private ) {
-				await info.replaceCookie( new_cookie );
-			} else {
-				await redis.setHashField( `genshin_gacha.cookie.${ user_id }`, "cookie", new_cookie );
-			}
+		if ( cookie ) {
+			await info.replaceCookie( cookie );
 		}
 		// 校验成功放入缓存，不需要频繁生成URL
 		await redis.setString( `genshin_draw_analysis_url-${ user_id }.${ sn || "0" }`, url, 24 * 60 * 60 );
-		await redis.setString( `genshin_draw_analysis_html_url-${ user_id }.${ sn || "0" }`, log_html_url, 24 * 60 * 60 );
-		
+		await redis.setString( key, log_html_url, 24 * 60 * 60 );
 		await sendMessage( log_html_url );
 		await sendMessage( "链接将在24小时后过期。" );
 		return;
@@ -391,7 +378,7 @@ async function export_gacha_url( user_id: number, sn: string, { redis, sendMessa
 }
 
 export async function main( bot: InputParameter ): Promise<void> {
-	const { sendMessage, messageData, redis } = bot;
+	const { sendMessage, messageData, redis, auth } = bot;
 	const { user_id, raw_message } = messageData;
 	const reg = new RegExp( /(?<type>json|excel|url)(\s)*(?<sn>\d+)?/ );
 	const res: RegExpExecArray | null = reg.exec( raw_message );
@@ -409,7 +396,17 @@ export async function main( bot: InputParameter ): Promise<void> {
 	
 	const gacha_data_list: Standard_Gacha_Data[] = [];
 	// 获取存储的抽卡记录数据
-	const uid: string = await redis.getString( `genshin_draw_analysis_curr_uid-${ user_id }` );
+	let uid: string = "";
+	if ( sn ) {
+		const info = await getPrivateAccount( user_id, sn, auth );
+		if ( typeof info === "string" ) {
+			await sendMessage( info );
+			return;
+		}
+		uid = info.setting.uid;
+	} else {
+		uid = await redis.getString( `genshin_draw_analysis_curr_uid-${ user_id }` );
+	}
 	let lang: string = "zh-cn";
 	for ( let gacha_type of gacha_types ) {
 		const gacha_data_map: Record<string, string> = await redis.getHash( `genshin_draw_analysis_data-${ gacha_type }-${ uid }` );
